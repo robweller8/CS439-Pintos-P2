@@ -28,18 +28,27 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy, *save_ptr, *new_fn_copy;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
+
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  new_fn_copy = palloc_get_page (0);
+  if (new_fn_copy == NULL)
+    return TID_ERROR;
+  strlcpy (new_fn_copy, file_name, PGSIZE);
+
+  new_fn_copy = strtok_r (new_fn_copy, " ", &save_ptr);
+  
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (new_fn_copy, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -50,9 +59,31 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+  char *file_name = file_name_, *save_ptr, *token;
+  char *fname_copy = palloc_get_page (0);
+  if (fname_copy == NULL)
+    return TID_ERROR;
+  strlcpy (fname_copy, file_name, PGSIZE);
   struct intr_frame if_;
   bool success;
+  int argc = 0;
+  
+
+  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
+       token = strtok_r (NULL, " ", &save_ptr))
+    argc++;
+
+  if(argc <= 0)
+    return;
+    
+  char *argv[argc + 1];
+
+  int index = 0;
+  for (token = strtok_r (fname_copy, " ", &save_ptr); token != NULL;
+       token = strtok_r (NULL, " ", &save_ptr)) 
+    argv[index++] = token;
+  argv[argc] = 0;
+  
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -62,9 +93,36 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
+  if (!success){
+    palloc_free_page (file_name);
     thread_exit ();
+  }
+
+  int i;
+  for (i = argc - 1; i >= 0; i--){
+    if_.esp -= (strlen(argv[i]) + 1);
+    memcpy(if_.esp, argv[i], strlen(argv[i]) + 1);
+  }
+  if_.esp -= (4 - ((strlen(file_name) + 1) % 4));
+  if_.esp -= 4;
+  *((int*)if_.esp) = 0;  
+
+  int j;
+  for (j = argc -1; j >= 0; j--){
+  if_.esp -= 4;
+  *((char**)if_.esp) = argv[j];
+  }
+
+  if_.esp -= 4;
+  *((char***)if_.esp) = if_.esp + 4;  
+
+  if_.esp -= 4;
+  *((int*)if_.esp) = argc;
+
+  if_.esp -= 4;
+  *((int*)if_.esp) = 0;  
+  
+
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -88,6 +146,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  
   return -1;
 }
 
