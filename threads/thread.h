@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -98,6 +99,7 @@ struct thread
     bool isDonated;                     /* Whether the thread is currently donated */
     struct list lock_list;              /* The locks the thread holds */
     struct lock* blocking_lock;         /* The lock that is blocking the thread now */
+    struct semaphore utsema;            /* User thread's semaphore, which is used to put in-kernel thread to sleep */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -144,5 +146,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+struct thread *get_thread (int);
 
 #endif /* threads/thread.h */

@@ -498,6 +498,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   t->isDonated = 0;
   list_init(&t->lock_list);
+  sema_init(&t->utsema, 0);
   t->blocking_lock = NULL;
   list_push_back (&all_list, &t->allelem);
 }
@@ -615,3 +616,15 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Returns a thread whose TID matches the parameter */
+struct thread *get_thread (int tid) {
+  struct thread *t;
+  struct list_elem *e;
+  if (list_empty(&all_list)) return NULL;
+  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+    t = list_entry(e, struct thread, allelem);
+    if (t->tid == tid) return t;
+  }
+  return NULL;
+}

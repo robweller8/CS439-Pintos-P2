@@ -49,8 +49,16 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (new_fn_copy, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
+
+  if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
+  return tid;
+  }
+
+  /* Now we have a user thread created, let it run. */
+  struct thread* ut = get_thread(tid);
+  sema_down(&ut->utsema);
+  while (ut->status == THREAD_BLOCKED) thread_unblock(ut);
   return tid;
 }
 
@@ -66,25 +74,26 @@ start_process (void *file_name_)
   strlcpy (fname_copy, file_name, PGSIZE);
   struct intr_frame if_;
   bool success;
-  int argc = 0;
-  
 
+  int argc = 0;
+
+  /* The following loop computes argc. */  
   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr))
     argc++;
 
+  /* If the input is empty, do not create a thread. */
   if(argc <= 0)
     return;
-    
+  
+  /* Otherwise, create an array to hold the arguments, and an ending NULL. */  
   char *argv[argc + 1];
-
   int index = 0;
   for (token = strtok_r (fname_copy, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr)) 
     argv[index++] = token;
   argv[argc] = 0;
   
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -98,27 +107,38 @@ start_process (void *file_name_)
     thread_exit ();
   }
 
+  /* If load succeeded, create the stack for it. */
   int i;
+
+  /* Push the arguments. */
   for (i = argc - 1; i >= 0; i--){
     if_.esp -= (strlen(argv[i]) + 1);
     memcpy(if_.esp, argv[i], strlen(argv[i]) + 1);
   }
+
+  /* Push word-alignment. */
   if_.esp -= (4 - ((strlen(file_name) + 1) % 4));
+
+  /* According to C standard, push an ending 0 as the end of argument list. */
   if_.esp -= 4;
   *((int*)if_.esp) = 0;  
 
+  /* Push the address of the arguments. */
   int j;
-  for (j = argc -1; j >= 0; j--){
+  for (j = argc - 1; j >= 0; j--){
   if_.esp -= 4;
   *((char**)if_.esp) = argv[j];
   }
 
+  /* Push the address of argv. */
   if_.esp -= 4;
-  *((char***)if_.esp) = if_.esp + 4;  
+  *((char**)if_.esp) = if_.esp + 4;  
 
+  /* Push argc. */
   if_.esp -= 4;
   *((int*)if_.esp) = argc;
 
+  /* Push return address. */
   if_.esp -= 4;
   *((int*)if_.esp) = 0;  
   
@@ -146,7 +166,6 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  
   return -1;
 }
 
@@ -156,6 +175,8 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  sema_up(&cur->utsema);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
