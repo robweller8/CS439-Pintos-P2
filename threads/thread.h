@@ -95,6 +95,7 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct list_elem sema_elem;         /* So that a lock can be put in a list */
+    struct file* executable;
     tid_t parent_tid;
     int original_priority;              /* The priority before donation. */
     bool isDonated;                     /* Whether the thread is currently donated */

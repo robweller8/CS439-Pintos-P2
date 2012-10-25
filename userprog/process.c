@@ -114,7 +114,8 @@ start_process (void *file_name_)
     sema_up(&cur->utsema);
     thread_exit ();
   }
-  file_deny_write(filesys_open(cur->name));
+  cur->executable = filesys_open(cur->name);
+  file_deny_write(cur->executable);
   sema_up(&cur->utsema);
   /* If load succeeded, create the stack for it. */
   int i;
@@ -194,9 +195,8 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   sema_up(&cur->utsema);
-  file_allow_write(filesys_open(cur->name));
-  file_close(filesys_open(cur->name));
   thread_yield();
+  if (cur->executable) file_allow_write(cur->executable);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

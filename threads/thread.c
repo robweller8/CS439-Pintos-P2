@@ -517,6 +517,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->blocking_lock = NULL;
   t->exit_called = false;
   t->parent_tid = 0;
+  t->executable = 0;
   int i = 0;
   for (; i < 130; i++) t->file_descriptors[i] = 0;
   list_push_back (&all_list, &t->allelem);
