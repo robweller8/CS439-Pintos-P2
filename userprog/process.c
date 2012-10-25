@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#define LOAD_UNSUCCESSFUL -1
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -28,7 +29,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy, *save_ptr, *new_fn_copy;
+  char *fn_copy, *save_ptr, *real_file_name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -39,26 +40,31 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  new_fn_copy = palloc_get_page (0);
-  if (new_fn_copy == NULL)
+  real_file_name = palloc_get_page (0);
+  if (real_file_name == NULL)
     return TID_ERROR;
-  strlcpy (new_fn_copy, file_name, PGSIZE);
+  strlcpy (real_file_name, file_name, PGSIZE);
 
-  new_fn_copy = strtok_r (new_fn_copy, " ", &save_ptr);
+  real_file_name = strtok_r (real_file_name, " ", &save_ptr);
   
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (new_fn_copy, PRI_DEFAULT, start_process, fn_copy);
-
+  tid = thread_create (real_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
-  return tid;
+    palloc_free_page (real_file_name);
+    return -1;
   }
-
-  /* Now we have a user thread created, let it run. */
-  struct thread* ut = get_thread(tid);
-  sema_down(&ut->utsema);
-  while (ut->status == THREAD_BLOCKED) thread_unblock(ut);
+  /* The following codes ensure system function exec() works properly. */
+  struct thread* user_thread = thread_get(tid);
+  user_thread->parent_tid = thread_current()->tid;
+  sema_down(&user_thread->utsema);
+  if (user_thread->exit_status == LOAD_UNSUCCESSFUL) {
+    palloc_free_page (real_file_name);
+    return -1;
+  }
+  //if (thread_current()->from_exec) sema_down(&user_thread->utsema);
+  palloc_free_page (real_file_name); 
   return tid;
 }
 
@@ -68,15 +74,14 @@ static void
 start_process (void *file_name_)
 {
   char *file_name = file_name_, *save_ptr, *token;
+  bool success;
+  struct thread* cur = thread_current();
   char *fname_copy = palloc_get_page (0);
   if (fname_copy == NULL)
     return TID_ERROR;
   strlcpy (fname_copy, file_name, PGSIZE);
-  struct intr_frame if_;
-  bool success;
 
   int argc = 0;
-
   /* The following loop computes argc. */  
   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr))
@@ -93,8 +98,9 @@ start_process (void *file_name_)
        token = strtok_r (NULL, " ", &save_ptr)) 
     argv[index++] = token;
   argv[argc] = 0;
-  
+
   /* Initialize interrupt frame and load executable. */
+  struct intr_frame if_;
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
@@ -104,16 +110,20 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   if (!success){
     palloc_free_page (file_name);
+    cur->exit_status = LOAD_UNSUCCESSFUL;
+    sema_up(&cur->utsema);
     thread_exit ();
   }
-
+  file_deny_write(filesys_open(cur->name));
+  sema_up(&cur->utsema);
   /* If load succeeded, create the stack for it. */
   int i;
-
+  void* arg_ptrs[argc];
   /* Push the arguments. */
   for (i = argc - 1; i >= 0; i--){
     if_.esp -= (strlen(argv[i]) + 1);
     memcpy(if_.esp, argv[i], strlen(argv[i]) + 1);
+    arg_ptrs[i] = if_.esp;
   }
 
   /* Push word-alignment. */
@@ -126,13 +136,13 @@ start_process (void *file_name_)
   /* Push the address of the arguments. */
   int j;
   for (j = argc - 1; j >= 0; j--){
-  if_.esp -= 4;
-  *((char**)if_.esp) = argv[j];
+    if_.esp -= 4;
+    *((char**)if_.esp) = arg_ptrs[j];
   }
 
   /* Push the address of argv. */
   if_.esp -= 4;
-  *((char**)if_.esp) = if_.esp + 4;  
+  *((char**)if_.esp) = if_.esp + 4;
 
   /* Push argc. */
   if_.esp -= 4;
@@ -141,8 +151,6 @@ start_process (void *file_name_)
   /* Push return address. */
   if_.esp -= 4;
   *((int*)if_.esp) = 0;  
-  
-
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -165,8 +173,18 @@ start_process (void *file_name_)
    does nothing. */
 int
 process_wait (tid_t child_tid UNUSED) 
-{
-  return -1;
+{ 
+  if (child_tid == TID_ERROR) return -1;
+  struct thread* user_thread = thread_get(child_tid);
+  if (!user_thread || user_thread->status == THREAD_DYING || user_thread->parent_tid != thread_current()->tid) return -1;
+  sema_down(&user_thread->utsema);
+  if (!user_thread->exit_called) {
+    printf("%s: exit(-1)\n", user_thread->name);
+    return -1;
+  }
+  int exit_status = user_thread->exit_status;
+  printf("%s: exit(%d)\n", user_thread->name, exit_status);
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -175,8 +193,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
   sema_up(&cur->utsema);
+  file_allow_write(filesys_open(cur->name));
+  file_close(filesys_open(cur->name));
+  thread_yield();
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -335,6 +355,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
         goto done;
       file_ofs += sizeof phdr;
+
       switch (phdr.p_type) 
         {
         case PT_NULL:

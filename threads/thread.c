@@ -71,6 +71,20 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+/* Returns a thread whose TID matches the parameter */
+struct thread*
+thread_get (int tid) {
+  struct thread *t;
+  struct list_elem *e;
+  if (!list_empty(&all_list)) {
+    for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
+      t = list_entry(e, struct thread, allelem);
+      if (t->tid == tid) return t;
+    }
+  }
+  return NULL;
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -491,6 +505,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
+  t->exit_status = 0;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
@@ -500,6 +515,10 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->lock_list);
   sema_init(&t->utsema, 0);
   t->blocking_lock = NULL;
+  t->exit_called = false;
+  t->parent_tid = 0;
+  int i = 0;
+  for (; i < 130; i++) t->file_descriptors[i] = 0;
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -616,15 +635,3 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
-
-/* Returns a thread whose TID matches the parameter */
-struct thread *get_thread (int tid) {
-  struct thread *t;
-  struct list_elem *e;
-  if (list_empty(&all_list)) return NULL;
-  for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e)) {
-    t = list_entry(e, struct thread, allelem);
-    if (t->tid == tid) return t;
-  }
-  return NULL;
-}

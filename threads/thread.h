@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "synch.h"
+#include "filesys/file.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -94,12 +95,15 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct list_elem sema_elem;         /* So that a lock can be put in a list */
-
+    tid_t parent_tid;
     int original_priority;              /* The priority before donation. */
     bool isDonated;                     /* Whether the thread is currently donated */
+    int exit_status;                    /* The exit status of the thread */
     struct list lock_list;              /* The locks the thread holds */
     struct lock* blocking_lock;         /* The lock that is blocking the thread now */
     struct semaphore utsema;            /* User thread's semaphore, which is used to put in-kernel thread to sleep */
+    struct file* file_descriptors[130];
+    bool exit_called;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -147,6 +151,6 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-struct thread *get_thread (int);
+struct thread *thread_get (int);
 
 #endif /* threads/thread.h */

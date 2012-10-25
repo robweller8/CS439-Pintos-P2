@@ -9,8 +9,8 @@ int
 main (int argc, char *argv[]) 
 {
   int i;
-
   test_name = "args";
+
 
   msg ("begin");
   msg ("argc = %d", argc);
@@ -19,6 +19,7 @@ main (int argc, char *argv[])
       msg ("argv[%d] = '%s'", i, argv[i]);
     else
       msg ("argv[%d] = null", i);
+
   msg ("end");
 
   return 0;
