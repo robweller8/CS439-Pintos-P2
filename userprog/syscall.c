@@ -77,9 +77,11 @@ int read (int fd, void *buffer, unsigned size){
       input_getc();
   }
   else {
+   // lock_acquire(&lock);
     struct thread* cur = thread_current();
     struct file *file = cur->file_descriptors[fd];
     return file_read (file, buffer, size);
+   // lock_release(&lock);
   }
 }
 
@@ -90,9 +92,12 @@ int write (int fd, const void *buffer, unsigned size){
     return size;
   }
   else {
+    
     struct thread* cur = thread_current();
     struct file *file = cur->file_descriptors[fd];
-    return file_write (file, buffer, size); 
+    //lock_acquire(&lock);
+    return file_write (file, buffer, size);
+    //lock_release(&lock); 
   }
 }
 
