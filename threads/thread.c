@@ -520,6 +520,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->executable = 0;
   int i = 0;
   for (; i < 130; i++) t->file_descriptors[i] = 0;
+  i = 0;
+  for (; i < 128; i++) t->children[i] = -1;
   list_push_back (&all_list, &t->allelem);
 }
 

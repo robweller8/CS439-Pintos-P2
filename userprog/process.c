@@ -55,7 +55,8 @@ process_execute (const char *file_name)
     palloc_free_page (real_file_name);
     return -1;
   }
-  /* The following codes ensure system function exec() works properly. */
+
+  /* The following code ensures system function exec() works properly. */
   struct thread* user_thread = thread_get(tid);
   user_thread->parent_tid = thread_current()->tid;
   sema_down(&user_thread->utsema);
@@ -63,7 +64,6 @@ process_execute (const char *file_name)
     palloc_free_page (real_file_name);
     return -1;
   }
-  //if (thread_current()->from_exec) sema_down(&user_thread->utsema);
   palloc_free_page (real_file_name); 
   return tid;
 }
@@ -112,11 +112,14 @@ start_process (void *file_name_)
     palloc_free_page (file_name);
     cur->exit_status = LOAD_UNSUCCESSFUL;
     sema_up(&cur->utsema);
+    thread_yield();
     thread_exit ();
   }
   cur->executable = filesys_open(cur->name);
   file_deny_write(cur->executable);
   sema_up(&cur->utsema);
+  thread_yield();
+
   /* If load succeeded, create the stack for it. */
   int i;
   void* arg_ptrs[argc];
@@ -137,6 +140,7 @@ start_process (void *file_name_)
     palloc_free_page (file_name);
     cur->exit_status = LOAD_UNSUCCESSFUL;
     sema_up(&cur->utsema);
+    thread_yield();
     thread_exit ();
   }
 
@@ -186,13 +190,22 @@ int
 process_wait (tid_t child_tid UNUSED) 
 { 
   if (child_tid == TID_ERROR) return -1;
+  int i = 0, first_empty = -1;
+  for (; i < 128; i++) {
+    if (first_empty == -1 && thread_current()->children[i] == -1) first_empty = i;
+    if (child_tid == thread_current()->children[i]) return -1;
+  }
+  thread_current()->children[first_empty] = child_tid;
   struct thread* user_thread = thread_get(child_tid);
-  if (!user_thread || user_thread->status == THREAD_DYING || user_thread->parent_tid != thread_current()->tid) return -1;
+  if (!user_thread || user_thread->status == THREAD_DYING) return -1;
+  if (user_thread->parent_tid != thread_current()->tid) return -1;
   sema_down(&user_thread->utsema);
   if (!user_thread->exit_called) {
+    user_thread->exit_status = -1;
     printf("%s: exit(-1)\n", user_thread->name);
     return -1;
   }
+  user_thread->parent_tid = 0;
   int exit_status = user_thread->exit_status;
   printf("%s: exit(%d)\n", user_thread->name, exit_status);
   return exit_status;
@@ -205,9 +218,12 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   sema_up(&cur->utsema);
-  thread_yield();
+  tid_t parenttid = cur->parent_tid;
   if (cur->executable) file_allow_write(cur->executable);
-
+  while (cur->parent_tid) thread_yield();
+  struct thread *parent = thread_get(parenttid);
+  int i = 0;
+  for (; i < 128; i++) {if (parent->children[i] == cur->tid) parent->children[i] = -1; break; }  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
