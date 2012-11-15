@@ -62,8 +62,10 @@ process_execute (const char *file_name)
   sema_down(&user_thread->utsema);
   if (user_thread->exit_status == LOAD_UNSUCCESSFUL) {
     palloc_free_page (real_file_name);
+   
     return -1;
   }
+
   palloc_free_page (real_file_name); 
   return tid;
 }
@@ -138,6 +140,7 @@ start_process (void *file_name_)
   if ((PHYS_BASE - if_.esp - 4 * (argc + 4)) > 4096) {
   TERMINATION:
     palloc_free_page (file_name);
+    palloc_free_page (fname_copy);
     cur->exit_status = LOAD_UNSUCCESSFUL;
     sema_up(&cur->utsema);
     thread_yield();
@@ -167,6 +170,7 @@ start_process (void *file_name_)
   if_.esp -= 4;
   *((int*)if_.esp) = 0;  
 
+    
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -175,6 +179,9 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+
+
+
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
@@ -218,6 +225,10 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
   sema_up(&cur->utsema);
+  int j = 2;
+  for (; j < 130; j++) {
+      cur->file_descriptors[j] = 0; 
+  }
   tid_t parenttid = cur->parent_tid;
   if (cur->executable) file_allow_write(cur->executable);
   while (cur->parent_tid) thread_yield();

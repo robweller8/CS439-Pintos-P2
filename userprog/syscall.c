@@ -11,6 +11,9 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
+
+
+
 void halt (void){
   shutdown_power_off();
   return;
@@ -26,10 +29,6 @@ void exit (int status){
   struct thread* cur = thread_current();
   cur->exit_status = status;
   cur->exit_called = true;
-  int i = 2;
-  for (; i < 130; i++) {
-      cur->file_descriptors[i] = 0; 
-  } 
   thread_exit();
 }
 
@@ -119,8 +118,14 @@ unsigned tell (int fd){
 static void
 syscall_handler (struct intr_frame *f ) 
 {
+
   struct thread* cur = thread_current();
   uint32_t *pd = cur->pagedir;
+   if (f->esp == NULL || !is_user_vaddr(f->esp) || pagedir_get_page(pd, f->esp) == NULL) {
+    f->eax = -1;
+    exit(-1);
+    return;
+  }
   int *arg_ptr = f->esp;	
   arg_ptr--;
   /* Check the return address. */  
@@ -132,6 +137,7 @@ syscall_handler (struct intr_frame *f )
 
   /* Increment esp to get SYSCALL_NUM, and then use a switch structure to handle different system functions. Validations are performed here. */
   arg_ptr++;
+  
   switch ((*arg_ptr)) {
 
     case SYS_HALT: {
@@ -149,30 +155,40 @@ syscall_handler (struct intr_frame *f )
 
     case SYS_EXEC: { 
       arg_ptr++;
-      const char* cmd_line = *arg_ptr;
-      if (cmd_line == NULL || !is_user_vaddr(cmd_line) || pagedir_get_page(pd, cmd_line) == NULL || !is_user_vaddr(arg_ptr)) {
+      if (arg_ptr == NULL || !is_user_vaddr(arg_ptr) || pagedir_get_page(pd, arg_ptr) == NULL || !is_user_vaddr( *arg_ptr) || *arg_ptr == NULL|| pagedir_get_page(pd, *arg_ptr) == NULL) {
         f->eax = -1;
         exit(-1);
         return;
       }
+      const char* cmd_line = *arg_ptr;
       f->eax = exec(cmd_line);
       return; }
 
     case SYS_WAIT: {
       arg_ptr++;
-      pid_t pid = *arg_ptr;
-      if (!is_user_vaddr(arg_ptr)) {
+      if (!is_user_vaddr(arg_ptr) || arg_ptr == NULL ) {
         f->eax = -1;
         exit(-1);
         return;
       }
+      pid_t pid = *arg_ptr;
       f->eax = wait(pid);
       return; }
 
     case SYS_CREATE: { 
       arg_ptr++;
+      if (arg_ptr == NULL || !is_user_vaddr(arg_ptr) || pagedir_get_page(pd, arg_ptr) == NULL || !is_user_vaddr( *arg_ptr) || *arg_ptr == NULL|| pagedir_get_page(pd, *arg_ptr) == NULL) {
+        f->eax = -1;
+        exit(-1);
+        return;
+      }
       const char* file = *arg_ptr;
       arg_ptr++;
+      if (arg_ptr == NULL || !is_user_vaddr(arg_ptr) || pagedir_get_page(pd, arg_ptr) == NULL) {
+        f->eax = -1;
+        exit(-1);
+        return;
+      }
       unsigned initial_size = *arg_ptr;
       if (file == NULL || !is_user_vaddr(file + initial_size - 1) || !is_user_vaddr(file) || pagedir_get_page(pd, file) == NULL || !is_user_vaddr(arg_ptr)) {
         f->eax = -1;
@@ -184,6 +200,11 @@ syscall_handler (struct intr_frame *f )
 
     case SYS_REMOVE: {
       arg_ptr++;
+      if (arg_ptr == NULL || !is_user_vaddr(arg_ptr) || pagedir_get_page(pd, arg_ptr) == NULL || !is_user_vaddr( *arg_ptr) || *arg_ptr == NULL|| pagedir_get_page(pd, *arg_ptr) == NULL) {
+        f->eax = -1;
+        exit(-1);
+        return;
+      }
       const char* file = *arg_ptr;
       if (file == NULL || !is_user_vaddr(file) || pagedir_get_page(pd, file) == NULL || !is_user_vaddr(arg_ptr)) {
         f->eax = -1;
@@ -195,6 +216,11 @@ syscall_handler (struct intr_frame *f )
 
     case SYS_OPEN: {
       arg_ptr++;
+      if (arg_ptr == NULL || !is_user_vaddr(arg_ptr) || pagedir_get_page(pd, arg_ptr) == NULL || !is_user_vaddr( *arg_ptr) || *arg_ptr == NULL|| pagedir_get_page(pd, *arg_ptr) == NULL) {
+        f->eax = -1;
+        exit(-1);
+        return;
+      }
       const char* file = *arg_ptr;
       if (file == NULL || !is_user_vaddr(file) || pagedir_get_page(pd, file) == NULL || !is_user_vaddr(arg_ptr)) {
         f->eax = -1;
@@ -206,7 +232,7 @@ syscall_handler (struct intr_frame *f )
 
     case SYS_FILESIZE: {
       arg_ptr++;
-      if (!is_user_vaddr(arg_ptr) || *arg_ptr < 2 || *arg_ptr > 129) {
+      if (!is_user_vaddr(arg_ptr) ||pagedir_get_page(pd, arg_ptr) == NULL || *arg_ptr < 2 || *arg_ptr > 129) {
         f->eax = -1;
         exit(-1);
         return; 
@@ -214,34 +240,62 @@ syscall_handler (struct intr_frame *f )
       f->eax = filesize(*arg_ptr);
       return; } 
       
-    case SYS_READ: { 
+    case SYS_READ: {
       arg_ptr++;
-      int fd = *arg_ptr;
+      if(!is_user_vaddr(arg_ptr) || arg_ptr == NULL|| pagedir_get_page(pd, arg_ptr) == NULL){
+        f->eax = -1;
+        exit(-1); 
+        return; 
+      }
+
+         int fd = *arg_ptr;
       arg_ptr++;
-      void *buffer = *arg_ptr; 
+      if(fd == NULL || fd < 0 || fd > 129 || !is_user_vaddr(arg_ptr) ||pagedir_get_page(pd, arg_ptr) == NULL || arg_ptr == NULL || !is_user_vaddr( *arg_ptr) || *arg_ptr == NULL|| pagedir_get_page(pd, *arg_ptr) == NULL){
+        f->eax = -1;
+        exit(-1);
+        return;  
+      }
+
+         void *buffer = *arg_ptr; 
       arg_ptr++;
-      unsigned size = *arg_ptr;      
-      if (buffer == NULL || !is_user_vaddr(buffer + size - 1) || !is_user_vaddr(buffer) || pagedir_get_page(pd, buffer) == NULL || !is_user_vaddr(arg_ptr) || fd < 0 || fd > 129) {
+    
+      if (buffer == NULL || !is_user_vaddr(buffer + *arg_ptr - 1) || !is_user_vaddr(buffer) || pagedir_get_page(pd, buffer) == NULL || !is_user_vaddr(arg_ptr) || fd == NULL || fd < 0 || fd > 129) {
         f->eax = -1;
         exit(-1);  
         return;
       }
-      f->eax = read(fd, buffer, size);  
+      else{
+         unsigned size = *arg_ptr; 
+      f->eax = read(fd, buffer, size);}  
       return; }
 
-    case SYS_WRITE: { 
+    case SYS_WRITE: {
       arg_ptr++;
-      int fd = *arg_ptr;
+      if(!is_user_vaddr(arg_ptr) || arg_ptr == NULL){
+        f->eax = -1;
+        exit(-1); 
+        return; 
+      }
+
+         int fd = *arg_ptr;
       arg_ptr++;
-      void *buffer = *arg_ptr; 
+      if(fd == NULL || fd < 0 || fd > 129 || !is_user_vaddr(arg_ptr) ||pagedir_get_page(pd, arg_ptr) == NULL || arg_ptr == NULL || !is_user_vaddr( *arg_ptr) || *arg_ptr == NULL|| pagedir_get_page(pd, *arg_ptr) == NULL){
+        f->eax = -1;
+        exit(-1);
+        return;  
+      }
+
+         void *buffer = *arg_ptr;
       arg_ptr++;
-      unsigned size = *arg_ptr;      
-      if (buffer == NULL || !is_user_vaddr(buffer + size - 1) || !is_user_vaddr(buffer) || pagedir_get_page(pd, buffer) == NULL || !is_user_vaddr(arg_ptr) || fd < 0 || fd > 129) {
+    
+      if (buffer == NULL || !is_user_vaddr(buffer + *arg_ptr - 1) || !is_user_vaddr(buffer) || pagedir_get_page(pd, buffer) == NULL || !is_user_vaddr(arg_ptr) || fd == NULL || fd < 0 || fd > 129) {
         f->eax = -1;
         exit(-1);  
         return;
       }
-      f->eax = write(fd, buffer, size);  
+      else{
+         unsigned size = *arg_ptr; 
+      f->eax = write(fd, buffer, size);}  
       return; }
 
     case SYS_SEEK: {
