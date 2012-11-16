@@ -35,38 +35,40 @@ process_execute (const char *file_name)
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
 
-  fn_copy = palloc_get_page (0);
+  fn_copy = palloc_get_page (PAL_USER);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  real_file_name = palloc_get_page (0);
+//char real_file_name[(char*)fn_copy];
+  real_file_name = palloc_get_page (PAL_USER);
   if (real_file_name == NULL)
     return TID_ERROR;
   strlcpy (real_file_name, file_name, PGSIZE);
+ 
 
   real_file_name = strtok_r (real_file_name, " ", &save_ptr);
-  
+  char first_name[strlen(real_file_name)];
+  strlcpy(first_name, real_file_name, PGSIZE);
+  palloc_free_page (real_file_name);
+
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (real_file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (first_name, PRI_DEFAULT, start_process, fn_copy);
+  
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
-    palloc_free_page (real_file_name);
     return -1;
   }
 
   /* The following code ensures system function exec() works properly. */
   struct thread* user_thread = thread_get(tid);
   user_thread->parent_tid = thread_current()->tid;
+//  thread_current()->fn_copy = fn_copy;
   sema_down(&user_thread->utsema);
   if (user_thread->exit_status == LOAD_UNSUCCESSFUL) {
-    palloc_free_page (real_file_name);
-   
     return -1;
   }
-
-  palloc_free_page (real_file_name); 
   return tid;
 }
 
@@ -75,17 +77,15 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_, *save_ptr, *token;
+  char *save_ptr, *token;
   bool success;
   struct thread* cur = thread_current();
-  char *fname_copy = palloc_get_page (0);
-  if (fname_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fname_copy, file_name, PGSIZE);
+  char fname_copy[strlen(file_name_)];
+  strlcpy (fname_copy, file_name_, PGSIZE);
 
   int argc = 0;
   /* The following loop computes argc. */  
-  for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;
+  for (token = strtok_r (file_name_, " ", &save_ptr); token != NULL;
        token = strtok_r (NULL, " ", &save_ptr))
     argc++;
 
@@ -107,11 +107,11 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (file_name_, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   if (!success){
-    palloc_free_page (file_name);
+    palloc_free_page (file_name_);
     cur->exit_status = LOAD_UNSUCCESSFUL;
     sema_up(&cur->utsema);
     thread_yield();
@@ -134,13 +134,12 @@ start_process (void *file_name_)
   }
 
   /* Push word-alignment. */
-  if_.esp -= (4 - ((strlen(file_name) + 1) % 4));
+  if_.esp -= (4 - ((strlen(file_name_) + 1) % 4));
 
   /* Check if the stack overflow will eventually occur. */
   if ((PHYS_BASE - if_.esp - 4 * (argc + 4)) > 4096) {
   TERMINATION:
-    palloc_free_page (file_name);
-    palloc_free_page (fname_copy);
+    palloc_free_page (file_name_);
     cur->exit_status = LOAD_UNSUCCESSFUL;
     sema_up(&cur->utsema);
     thread_yield();
@@ -170,6 +169,7 @@ start_process (void *file_name_)
   if_.esp -= 4;
   *((int*)if_.esp) = 0;  
 
+ // palloc_free_page(cur->fn_copy);
     
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -222,6 +222,7 @@ process_wait (tid_t child_tid UNUSED)
 void
 process_exit (void)
 {
+
   struct thread *cur = thread_current ();
   uint32_t *pd;
   sema_up(&cur->utsema);

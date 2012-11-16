@@ -104,6 +104,7 @@ struct thread
     struct lock* blocking_lock;         /* The lock that is blocking the thread now */
     struct semaphore utsema;            /* User thread's semaphore, which is used to put in-kernel thread to sleep */
     struct file* file_descriptors[130];
+    char* fn_copy;
     struct tid_t* children[128];
     bool exit_called;
 
