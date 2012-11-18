@@ -524,6 +524,7 @@ init_thread (struct thread *t, const char *name, int priority)
   i = 0;
   for (; i < 128; i++) t->children[i] = -1;
   list_push_back (&all_list, &t->allelem);
+  list_init(&t->spage_table);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

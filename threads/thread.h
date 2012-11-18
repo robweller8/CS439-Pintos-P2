@@ -107,6 +107,7 @@ struct thread
     char* fn_copy;
     struct tid_t* children[128];
     bool exit_called;
+    struct list spage_table;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

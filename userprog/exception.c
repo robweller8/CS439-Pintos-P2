@@ -148,6 +148,7 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  /********************** BELOW TO BE REMOVED*******************/
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
@@ -158,5 +159,8 @@ page_fault (struct intr_frame *f)
           write ? "writing" : "reading",
           user ? "user" : "kernel");
   kill (f);
+  /********************** ABOVE TO BE REMOVED*******************/
+
+  /* Demand-paging, the following codes bring in pages. */
 }
 

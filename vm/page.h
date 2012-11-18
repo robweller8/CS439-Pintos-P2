@@ -1,10 +1,17 @@
-
-struct page
+#ifndef VM_PAGE_H
+#define VM_PAGE_H
+#include "filesys/file.h"
+#include <list.h>
+struct spage
   {
-  
+    void* vir_addr;
+    bool dirty;
+    bool writable;
+    bool loaded;
+    struct file *file;
+    uint32_t ofs;
+    uint32_t read_bytes;
+    uint32_t zero_bytes;
+    struct list_elem elem;
   };
-
-struct page_table
-  {
-    struct thread* owner;
-  };
+#endif

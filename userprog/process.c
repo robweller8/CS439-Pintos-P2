@@ -15,9 +15,11 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #define LOAD_UNSUCCESSFUL -1
 
 static thread_func start_process NO_RETURN;
@@ -535,6 +537,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+
+  /********************** BELOW TO BE REMOVED*******************/
       /* Get a page of memory. */
       uint8_t *kpage = obtain_frame(PAL_USER); //CHANGED
       if (kpage == NULL)
@@ -554,6 +558,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
           free_frame (kpage); //CHANGED
           return false; 
         }
+  /********************** ABOVE TO BE REMOVED*******************/
+
+      /* Eliminated frame allocation in load_segment(), 
+         but we will record information into supplemental page table. 
+         Frame allocation will then be performed in page_fault() in exception.c (demand-paging). */
+      struct spage* new_spage = malloc(sizeof(struct spage));
+      new_spage->file = file;
+      new_spage->ofs = ofs;
+      new_spage->vir_addr = upage;
+      new_spage->read_bytes = read_bytes;
+      new_spage->zero_bytes = zero_bytes;
+      new_spage->writable = writable;
+      new_spage->dirty = false;
+      new_spage->loaded = false;
+      list_push_back(&thread_current()->spage_table, &new_spage->elem);
+      ofs += page_read_bytes;
 
       /* Advance. */
       read_bytes -= page_read_bytes;
