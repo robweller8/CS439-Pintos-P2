@@ -152,21 +152,27 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-/*
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-  kill (f);
-*/
-  struct spage* sp = get_spage(fault_addr);
-  if (!sp) return;
-  void* fr = obtain_frame(PAL_USER);
-  if (!fr) return;
-  file_read_at(sp->file, fr, sp->read_bytes, sp->ofs);
-  memset(fr + sp->read_bytes, 0, sp->zero_bytes);
-  install_page (sp->vir_addr, fr, sp->writable);
-  sp->allocated = true;
+    struct spage* sp = get_spage(fault_addr);
+    if (!sp) {
+      if (is_user_vaddr(fault_addr)) kill(f);
+      else {
+        if (not_present) return;
+        else kill(f);
+      }
+    }
+    uint8_t *kpage = obtain_frame(PAL_USER);
+    if (!kpage) kill(f);
+    if (file_read_at(sp->file, kpage, sp->read_bytes, sp->ofs) != (int)sp->read_bytes)
+    {
+      free_frame(kpage);
+      return;
+    }
+    memset(kpage + sp->read_bytes, 0, sp->zero_bytes);
+    if (!install_page (sp->vir_addr, kpage, sp->writable))
+    {
+      free_frame(kpage);
+      return;
+    }
+    sp->allocated = true;
 }
 

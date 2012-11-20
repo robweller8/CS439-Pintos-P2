@@ -534,26 +534,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-
-  /********************** BELOW TO BE REMOVED*******************
-      uint8_t *kpage = obtain_frame(PAL_USER); //CHANGED
-      if (kpage == NULL)
-        return false;
-
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          free_frame (kpage); //CHANGED
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
-      if (!install_page (upage, kpage, writable)) 
-        {
-          free_frame (kpage); //CHANGED
-          return false; 
-        }
-  ********************** ABOVE TO BE REMOVED*******************/
-
       /* Eliminated frame allocation in load_segment(), 
          but we will record information into supplemental page table. 
          Frame allocation will then be performed in page_fault(). */
