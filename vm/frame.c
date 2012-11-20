@@ -40,7 +40,7 @@ void free_frame (void* frame)
         struct frame* entry = list_entry(felem, struct frame, elem);
         if (entry->phys_addr == frame)
         {
-            list_remove(e);
+            list_remove(felem);
             free(entry);
             break;
         }

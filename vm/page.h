@@ -7,11 +7,14 @@ struct spage
     void* vir_addr;
     bool dirty;
     bool writable;
-    bool loaded;
+    bool allocated;
     struct file *file;
     uint32_t ofs;
     uint32_t read_bytes;
     uint32_t zero_bytes;
     struct list_elem elem;
+    struct list_elem allelem;
   };
+
+struct spage* get_spage (void*);
 #endif
