@@ -4,7 +4,11 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
+#include "threads/vaddr.h"
+#include "vm/frame.h"
+#include "userprog/process.h"
+#include "vm/page.h"
+#include "threads/malloc.h"
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -148,20 +152,21 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /********************** BELOW TO BE REMOVED*******************/
-  /* To implement virtual memory, delete the rest of the function
-     body, and replace it with code that brings in the page to
-     which fault_addr refers. */
-
+/*
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
   kill (f);
-  /********************** ABOVE TO BE REMOVED*******************/
-
-  /* Demand-paging, the following codes bring in pages. */
-  
+*/
+  struct spage* sp = get_spage(fault_addr);
+  if (!sp) return;
+  void* fr = obtain_frame(PAL_USER);
+  if (!fr) return;
+  file_read_at(sp->file, fr, sp->read_bytes, sp->ofs);
+  memset(fr + sp->read_bytes, 0, sp->zero_bytes);
+  install_page (sp->vir_addr, fr, sp->writable);
+  sp->allocated = true;
 }
 

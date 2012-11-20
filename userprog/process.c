@@ -240,6 +240,7 @@ process_exit (void)
   for (; i < 128; i++) {if (parent->children[i] == cur->tid) parent->children[i] = -1; break; }  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
+  spage_table_destroy();
   pd = cur->pagedir;
   if (pd != NULL) 
     {
@@ -456,10 +457,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
-/* load() helpers. */
-
-static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -538,13 +535,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 
-  /********************** BELOW TO BE REMOVED*******************/
-      /* Get a page of memory. */
+  /********************** BELOW TO BE REMOVED*******************
       uint8_t *kpage = obtain_frame(PAL_USER); //CHANGED
       if (kpage == NULL)
         return false;
 
-      /* Load this page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
           free_frame (kpage); //CHANGED
@@ -552,18 +547,18 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
       memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-      /* Add the page to the process's address space. */
       if (!install_page (upage, kpage, writable)) 
         {
           free_frame (kpage); //CHANGED
           return false; 
         }
-  /********************** ABOVE TO BE REMOVED*******************/
+  ********************** ABOVE TO BE REMOVED*******************/
 
       /* Eliminated frame allocation in load_segment(), 
          but we will record information into supplemental page table. 
-         Frame allocation will then be performed in page_fault() in exception.c (demand-paging). */
+         Frame allocation will then be performed in page_fault(). */
       struct spage* new_spage = malloc(sizeof(struct spage));
+      if (!new_spage) return false;
       new_spage->file = file;
       new_spage->ofs = ofs;
       new_spage->vir_addr = upage;
@@ -612,8 +607,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
-install_page (void *upage, void *kpage, bool writable)
+bool install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
 
