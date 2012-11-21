@@ -155,33 +155,25 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
-/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
-/*check in case of stack growth*/
+  struct spage* sp = get_spage(fault_addr);
   struct thread* cur = thread_current();
 
+  /* check in case of stack growth */
+
+
+    if(fault_addr == NULL || !not_present)
+       exit(-1);
     if(cur->stack_size < MAX_STACK_SIZE && fault_addr < PHYS_BASE && fault_addr >= (cur->thread_esp - 32)){
- //     printf("inside grow stack1 \n");
       uint8_t *stackpage;
-      stackpage = obtain_frame(PAL_USER);
- //     printf("inside grow stack2 \n");
+      stackpage = obtain_frame(PAL_USER, sp);
       void *upage = pg_round_down(fault_addr);
-//      printf("inside grow stack3 \n");
       uint32_t *page_dir = cur->pagedir;
-  //    printf("inside grow stack4 \n");
       pagedir_set_page (page_dir, upage, stackpage, true);
-//      printf("inside grow stack5 \n");
       cur->stack_size += 4096;
       cur->thread_esp = NULL;
       return;
     }
-    
 
-  
-/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
-
- //     printf("inside lazy load \n");
-    struct spage* sp = get_spage(fault_addr);
     if (!sp) {
       if (is_user_vaddr(fault_addr)) kill(f);
       else {
@@ -189,7 +181,7 @@ page_fault (struct intr_frame *f)
         else kill(f);
       }
     }
-    uint8_t *kpage = obtain_frame(PAL_USER);
+    uint8_t *kpage = obtain_frame(PAL_USER, sp);
     if (!kpage) kill(f);
     if (file_read_at(sp->file, kpage, sp->read_bytes, sp->ofs) != (int)sp->read_bytes)
     {
@@ -197,13 +189,11 @@ page_fault (struct intr_frame *f)
       return;
     }
     memset(kpage + sp->read_bytes, 0, sp->zero_bytes);
-    if (!install_page (sp->vir_addr, kpage, sp->writable))
+    if (!pagedir_set_page(cur->pagedir, sp->vir_addr, kpage, sp->writable))
     {
       free_frame(kpage);
       return;
     }
     sp->allocated = true;
-
-     //    printf("end page fault \n");
 }
 

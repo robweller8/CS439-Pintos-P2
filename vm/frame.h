@@ -15,8 +15,8 @@ struct frame
   };
 
 void frame_table_init ();
-void add_frame (void*);
-void evict_frame (void*);
-void* obtain_frame (enum palloc_flags);
+void add_frame (void*, struct spage*);
+void* evict_frame (enum palloc_flags);
+void* obtain_frame (enum palloc_flags, struct spage*);
 void free_frame (void*);
 #endif
