@@ -9,6 +9,10 @@
 #include "userprog/process.h"
 #include "vm/page.h"
 #include "threads/malloc.h"
+
+/* Default stack size limit in many GNU/Linux systems (8 MB) */
+static const int MAX_STACK_SIZE = 8388608;
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -63,7 +67,6 @@ exception_init (void)
      fault address is stored in CR2 and needs to be preserved. */
   intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
 }
-
 /* Prints exception statistics. */
 void
 exception_print_stats (void) 
@@ -117,7 +120,8 @@ kill (struct intr_frame *f)
    also require modifying this code.
 
    At entry, the address that faulted is in CR2 (Control Register
-   2) and information about the fault, formatted as described in
+   2) and information about the fault, formattfunction declaration isn’t a prototype
+ed as described in
    the PF_* macros in exception.h, is in F's error_code member.  The
    example code here shows how to parse that information.  You
    can find more information about both of these in the
@@ -152,6 +156,31 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+/*check in case of stack growth*/
+  struct thread* cur = thread_current();
+
+    if(cur->stack_size < MAX_STACK_SIZE && fault_addr < PHYS_BASE && fault_addr >= (cur->thread_esp - 32)){
+ //     printf("inside grow stack1 \n");
+      uint8_t *stackpage;
+      stackpage = obtain_frame(PAL_USER);
+ //     printf("inside grow stack2 \n");
+      void *upage = pg_round_down(fault_addr);
+//      printf("inside grow stack3 \n");
+      uint32_t *page_dir = cur->pagedir;
+  //    printf("inside grow stack4 \n");
+      pagedir_set_page (page_dir, upage, stackpage, true);
+//      printf("inside grow stack5 \n");
+      cur->stack_size += 4096;
+      cur->thread_esp = NULL;
+      return;
+    }
+    
+
+  
+/*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+
+ //     printf("inside lazy load \n");
     struct spage* sp = get_spage(fault_addr);
     if (!sp) {
       if (is_user_vaddr(fault_addr)) kill(f);
@@ -174,5 +203,7 @@ page_fault (struct intr_frame *f)
       return;
     }
     sp->allocated = true;
+
+     //    printf("end page fault \n");
 }
 

@@ -344,6 +344,9 @@ make_idtr_operand (uint16_t limit, void *base)
 void
 intr_handler (struct intr_frame *frame) 
 {
+  struct thread* cur = thread_current();
+  if(cur->thread_esp == NULL)
+     cur->thread_esp = frame->esp;
   bool external;
   intr_handler_func *handler;
 
@@ -386,6 +389,7 @@ intr_handler (struct intr_frame *frame)
       if (yield_on_return) 
         thread_yield (); 
     }
+  cur->thread_esp = NULL;
 }
 
 /* Handles an unexpected interrupt with interrupt frame F.  An

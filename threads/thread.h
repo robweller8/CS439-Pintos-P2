@@ -108,6 +108,9 @@ struct thread
     struct tid_t* children[128];
     bool exit_called;
     struct list spage_table;
+    void *thread_esp;
+    int stack_size;
+
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

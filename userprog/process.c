@@ -133,13 +133,14 @@ start_process (void *file_name_)
     if_.esp -= (strlen(argv[i]) + 1);
     memcpy(if_.esp, argv[i], strlen(argv[i]) + 1);
     arg_ptrs[i] = if_.esp;
-    if ((PHYS_BASE - if_.esp) > 4096) goto TERMINATION;
+   // if ((PHYS_BASE - if_.esp) > 4096) 
+   //   goto TERMINATION;
   }
 
   /* Push word-alignment. */
   if_.esp -= (4 - ((strlen(file_name) + 1) % 4));
 
-  /* Check if the stack overflow will eventually occur. */
+  /* Check if the stack overflow will eventually occur. 
   if ((PHYS_BASE - if_.esp - 4 * (argc + 4)) > 4096) {
   TERMINATION:
     palloc_free_page (file_name);
@@ -148,7 +149,7 @@ start_process (void *file_name_)
     sema_up(&cur->utsema);
     thread_yield();
     thread_exit ();
-  }
+  }*/
 
   /* According to C standard, push an ending 0 as the end of argument list. */
   if_.esp -= 4;
@@ -234,6 +235,7 @@ process_exit (void)
   }
   tid_t parenttid = cur->parent_tid;
   if (cur->executable) file_allow_write(cur->executable);
+
   while (cur->parent_tid) thread_yield();
   struct thread *parent = thread_get(parenttid);
   int i = 0;
