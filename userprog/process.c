@@ -550,6 +550,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       new_spage->writable = writable;
       new_spage->dirty = false;
       new_spage->allocated = false;
+      new_spage->swap_index = -1;
       list_push_back(&thread_current()->spage_table, &new_spage->elem);
       ofs += page_read_bytes;
 

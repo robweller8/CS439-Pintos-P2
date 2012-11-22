@@ -13,6 +13,7 @@ struct spage
     uint32_t read_bytes;
     uint32_t zero_bytes;
     struct list_elem elem;
+    int swap_index;
   };
 
 struct spage* get_spage (void*);

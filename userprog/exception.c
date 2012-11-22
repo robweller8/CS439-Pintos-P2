@@ -175,10 +175,9 @@ page_fault (struct intr_frame *f)
     }
 
     if (!sp) {
-      if (is_user_vaddr(fault_addr)) kill(f);
+      if (user) kill(f);
       else {
-        if (not_present) return;
-        else kill(f);
+        return;
       }
     }
     uint8_t *kpage = obtain_frame(PAL_USER, sp);

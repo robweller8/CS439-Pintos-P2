@@ -3,6 +3,7 @@
 #include "threads/thread.h"
 #include "vm/page.h"
 #include "threads/palloc.h"
+#include "threads/synch.h"
 #include <list.h>
 struct list frame_table;
 
@@ -13,6 +14,8 @@ struct frame
     void* phys_addr;
     struct list_elem elem;
   };
+
+struct lock frame_lock;
 
 void frame_table_init ();
 void add_frame (void*, struct spage*);
